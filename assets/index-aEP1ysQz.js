@@ -65,7 +65,7 @@ function InputField({ type, name, required = false }) {
   inputElement.required = required;
   return inputElement;
 }
-function SelectField({ values, name, selectedOption }) {
+function SelectField({ values, name, selectedOption }, isInit = false) {
   const selectElement = document.createElement("select");
   selectElement.id = name;
   selectElement.name = name;
@@ -74,8 +74,9 @@ function SelectField({ values, name, selectedOption }) {
     selectElement.addEventListener("change", (event) => selectedOption(event));
   }
   selectElement.innerHTML = `
-    ${values.map((category) => `<option value="${category}">${category}</option>`).join("")}
-    `;
+  ${isInit && `<option value="" disabled selected>선택해주세요.</option>`}
+  ${values.map((category) => `<option value="${category}">${category}</option>`).join("")}
+`;
   return selectElement;
 }
 const TEXTAREA = {
@@ -93,15 +94,6 @@ function TextareaField({ name, required = false }) {
 }
 function generateUniqueId() {
   return crypto.randomUUID();
-}
-function getRestaurantStorage() {
-  if (!localStorage.getItem("restaurant")) {
-    localStorage.setItem("restaurant", JSON.stringify(LIST_ITEM_CONTENTS));
-  }
-  return JSON.parse(localStorage.getItem("restaurant"));
-}
-function setRestaurantStorage(restaurantInformation) {
-  localStorage.setItem("restaurant", JSON.stringify(restaurantInformation));
 }
 const HEADER_CONTENTS = {
   TITLE: "점심 뭐 먹지",
@@ -157,9 +149,9 @@ const LIST_ITEM_CONTENTS = [
     favorites: false
   }
 ];
-const SELECT_CATEGORY = ["none", "ko", "ch", "ja", "we", "as", "etc"];
-const SELECT_FILTER = ["all", "ko", "ch", "ja", "we", "as", "etc"];
-const SELECT_DISTANCE = ["none", 5, 10, 15, 20, 30];
+const SELECT_CATEGORY = ["korea", "china", "japan", "western", "asian", "etc"];
+const SELECT_FILTER = ["all", "korea", "china", "japan", "western", "asian", "etc"];
+const SELECT_DISTANCE = [5, 10, 15, 20, 30];
 const SELECT_SORT = ["name", "distance"];
 const MODAL_BUTTONS_PROPERTY = [
   { type: "button", stylingBased: "secondary", text: "취소하기" },
@@ -169,25 +161,29 @@ const RESTAURANT_MODAL_PROPERTY = [
   { type: "submit", stylingBased: "secondary", text: "삭제하기" },
   { type: "button", stylingBased: "primary", text: "닫기" }
 ];
+const STORAGE_KEY = "restaurant";
+const RestaurantRepository = {
+  getAll: function() {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      return JSON.parse(savedData);
+    }
+    return;
+  },
+  save: function(restaurantInformation) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurantInformation));
+  }
+};
 function formatDistance(distanceMap) {
-  const categoryNames = {
-    none: "선택해주세요.",
-    5: "5분 내",
-    10: "10분 내",
-    15: "15분 내",
-    20: "20분 내",
-    30: "30분 내"
-  };
-  return distanceMap.map((distance) => categoryNames[distance]);
+  return distanceMap.map((distance) => `${distance}분 내`);
 }
 function formatCategory(categoryMap) {
   const categoryNames = {
-    none: "선택해주세요.",
-    ko: "한식",
-    ch: "중식",
-    ja: "일식",
-    we: "양식",
-    as: "아시안",
+    korea: "한식",
+    china: "중식",
+    japan: "일식",
+    western: "양식",
+    asian: "아시안",
     etc: "기타"
   };
   return categoryMap.map((category) => categoryNames[category]);
@@ -195,11 +191,11 @@ function formatCategory(categoryMap) {
 function formatFilter(categoryMap) {
   const categoryNames = {
     all: "전체",
-    ko: "한식",
-    ch: "중식",
-    ja: "일식",
-    we: "양식",
-    as: "아시안",
+    korea: "한식",
+    china: "중식",
+    japan: "일식",
+    western: "양식",
+    asian: "아시안",
     etc: "기타"
   };
   return categoryMap.map((category) => categoryNames[category]);
@@ -220,7 +216,7 @@ function Header({ TITLE, LABEL }) {
   headerElement.innerHTML = `
     <h1 class="gnb__title text-title">${TITLE}</h1>
     <button type="button" class="gnb__button" aria-label=${LABEL}>
-      <img src="https://aydenote.github.io/javascript-lunch/add-button.png" alt=${LABEL} />
+      <img src="https://aydenote.github.io/javascript-lunch/add-button.png" alt="음식점 추가 모달 활성화 버튼" />
     </button>
     `;
   return headerElement;
@@ -288,7 +284,7 @@ class Restaurant {
   get information() {
     return { ...__privateGet(this, _information) };
   }
-  updateInformation() {
+  updateFavorite() {
     __privateGet(this, _information).favorites = !__privateGet(this, _information).favorites;
   }
 }
@@ -308,7 +304,7 @@ class RestaurantList {
     });
     __privateGet(this, _restaurants).push(newRestaurant);
     const newRestaurantData = __privateGet(this, _restaurants).map((restaurant) => restaurant.information);
-    setRestaurantStorage(newRestaurantData);
+    RestaurantRepository.save(newRestaurantData);
     return newRestaurant;
   }
   deleteRestaurant(id) {
@@ -316,15 +312,15 @@ class RestaurantList {
     if (targetIndex !== -1) {
       __privateGet(this, _restaurants).splice(targetIndex, 1);
       const newRestaurantData = __privateGet(this, _restaurants).map((restaurant) => restaurant.information);
-      setRestaurantStorage(newRestaurantData);
+      RestaurantRepository.save(newRestaurantData);
     }
   }
-  updateRestaurant(id) {
+  updateFavorite(id) {
     const targetRestaurant = __privateGet(this, _restaurants).find((restaurant) => restaurant.information.id === id);
     if (targetRestaurant) {
-      targetRestaurant.updateInformation();
+      targetRestaurant.updateFavorite();
       const newRestaurantData = __privateGet(this, _restaurants).map((restaurant) => restaurant.information);
-      setRestaurantStorage(newRestaurantData);
+      RestaurantRepository.save(newRestaurantData);
     }
   }
   getRestaurantInformation(id) {
@@ -340,7 +336,7 @@ function SelectSortController(app2, listContainerElement) {
   let currentFilter = "전체";
   let currentSort = "";
   function updateList() {
-    const storedRestaurants = getRestaurantStorage();
+    const storedRestaurants = RestaurantRepository.getAll();
     const restaurantList = new RestaurantList(storedRestaurants);
     let filteredRestaurants = restaurantList.restaurants.filter((restaurant) => {
       if (currentFilter === "전체") {
@@ -383,7 +379,7 @@ function SelectSortController(app2, listContainerElement) {
   app2.appendChild(divElement);
 }
 function ListController(app2, listContainerElement, type = "all") {
-  const storedRestaurants = getRestaurantStorage();
+  const storedRestaurants = RestaurantRepository.getAll();
   const restaurantList = new RestaurantList(storedRestaurants);
   let listElement;
   listContainerElement.innerHTML = "";
@@ -432,7 +428,7 @@ function ListItem({ id, category, name, distance, description, favorites, link }
   }
   listElement.innerHTML = `
     <div class="restaurant__category">
-      <img src=${CATRGORY_IMAGE_PATH[category]} alt=${category} class="category-icon" />
+      <img src=${CATRGORY_IMAGE_PATH[category]} alt="${category} 카테고리 이미지" class="category-icon" />
     </div>
     <div class="restaurant__info">
       <h3 class="restaurant__name text-subtitle">${name}</h3>
@@ -441,13 +437,13 @@ function ListItem({ id, category, name, distance, description, favorites, link }
       ${description}
       </p>
       </div>
-      <img src="${renderFavoritesImg(favorites)}" alt=favorites class="favorites-icon" />
+      <img src="${renderFavoritesImg(favorites)}" alt="자주가는 음식점 버튼" class="favorites-icon" />
       ${createLink()}
     `;
   return listElement;
 }
 function toggleFavorite(event, restaurantList, restaurantId) {
-  restaurantList.updateRestaurant(restaurantId);
+  restaurantList.updateFavorite(restaurantId);
   const favoriteIcon = event.target.closest("img.favorites-icon");
   const restaurantFavoriteIconElement = document.querySelector(
     `.restaurant-list-container [data-id="${restaurantId}"] img.favorites-icon`
@@ -477,11 +473,11 @@ function openModal(restaurantList, restaurantId) {
     children: { formElement },
     submit: (event) => {
       const restaurantElement = document.querySelector(".restaurant");
-      const storedRestaurants = getRestaurantStorage();
+      const storedRestaurants = RestaurantRepository.getAll();
       const restaurantList2 = new RestaurantList(storedRestaurants);
       restaurantList2.deleteRestaurant(restaurantElement.dataset.id);
     },
-    cancle: () => {
+    cancel: () => {
       EventHandler.modalToggle(mainElement, formElement);
     }
   });
@@ -561,18 +557,18 @@ function openRestaurantModal(app2, listContainerElement) {
   ModalController({
     children: { titleElement, formElement },
     submit: handleSubmit,
-    cancle: handleCancel
+    cancel: handleCancel
   });
   EventHandler.modalToggle(app2);
 }
-function ModalController({ children, submit = null, cancle = null }) {
+function ModalController({ children, submit = null, cancel = null }) {
   const mainElement = app.querySelector("main");
   const modalElement = Modal(convertObjectToArray(children));
   const closeButtonElement = children.formElement.querySelector("button[type='button']");
   const modalBackdropElement = modalElement.querySelector(".modal-backdrop");
   document.querySelector(".favorites-icon");
   modalBackdropElement.addEventListener("click", () => EventHandler.modalToggle(mainElement, children.formElement));
-  closeButtonElement.addEventListener("click", () => cancle());
+  closeButtonElement.addEventListener("click", () => cancel());
   children.formElement.addEventListener("submit", (event) => submit(event));
   mainElement.appendChild(modalElement);
 }
@@ -681,7 +677,7 @@ const INPUT_ITEMS = [
 function createFormItems(inputItems) {
   const formItems = inputItems.map((item) => {
     if (item.tag === "select") {
-      const component = SelectField(item);
+      const component = SelectField(item, true);
       return FormItemField({ item, component });
     }
     if (item.tag === "input") {
@@ -699,6 +695,10 @@ function MainController() {
   const app2 = document.getElementById("app");
   const listContainerElement = document.createElement("section");
   listContainerElement.classList.add("restaurant-list-container");
+  const savedRestaurant = RestaurantRepository.getAll();
+  if (!savedRestaurant) {
+    RestaurantRepository.save(LIST_ITEM_CONTENTS);
+  }
   HeaderController(app2, listContainerElement);
   TabController(app2);
   SelectSortController(app2, listContainerElement);
